@@ -49,3 +49,35 @@ A pesar de ser robusto, existen limitaciones y áreas de mejora:
 *   **Compatibilidad JSON5/Merge:** No se puede usar el formato `json5` junto con el modo `merge`, lo cual es una limitación de configuración validada por el webhook.
 *   **Límites de Recursos:** Aunque el webhook advierte, no impone límites de recursos por defecto si el usuario no los define, lo que podría llevar a problemas de "Noisy Neighbor" en el clúster.
 *   **Ingress Avanzado:** El soporte de Ingress es básico. No soporta Gateway API ni funcionalidades avanzadas de tráfico (Canary, Blue/Green) de forma nativa.
+
+## 4. Análisis de Código y Configuración
+
+Se realizó un análisis del código fuente en busca de malware, backdoors y brechas de seguridad:
+
+*   **Malware/Backdoors:** No se encontraron patrones sospechosos.
+    *   No hay llamadas ofuscadas o ejecuciones arbitrarias (`exec.Command` solo se usa en tests y para invocar `kubectl` en e2e).
+    *   No hay conexiones de red no autorizadas. Las únicas conexiones externas son a:
+        *   Registros OCI (configurables por el usuario) para auto-actualizaciones.
+        *   Backblaze B2 (configurable por el usuario) para backups.
+        *   API de Kubernetes (comportamiento estándar del operador).
+*   **Brechas de Seguridad:**
+    *   El código maneja credenciales de forma segura a través de Secrets y variables de entorno.
+    *   Los argumentos de los comandos (como `rclone` para backups) se construyen de forma segura, evitando inyección de comandos.
+
+### Configuración Requerida
+
+Para asegurar el correcto funcionamiento, debes configurar lo siguiente:
+
+1.  **Credenciales de Backup (B2):**
+    *   Crear un Secret `b2-backup-credentials` en el namespace del operador con las claves: `B2_BUCKET`, `B2_KEY_ID`, `B2_APP_KEY`, `B2_ENDPOINT`.
+    *   Esto es crítico para habilitar la funcionalidad de backup/restore y auto-actualización segura.
+
+2.  **API Keys de Proveedores AI:**
+    *   Crear un Secret (ej. `openclaw-api-keys`) con tus claves (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.).
+    *   Referenciarlo en el CRD mediante `spec.envFrom`.
+
+3.  **Tailscale (Opcional):**
+    *   Si usas Tailscale, debes crear un Secret con tu `authkey` y referenciarlo en `spec.tailscale.authKeySecretRef`.
+
+4.  **Resource Limits:**
+    *   Se recomienda definir `resources.limits` y `resources.requests` en el CRD para evitar problemas de rendimiento en el clúster, ya que los valores por defecto pueden no ser adecuados para cargas de producción.
